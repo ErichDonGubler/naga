@@ -191,10 +191,7 @@ impl<T, E: Error> PrettyResult for Result<T, E> {
 }
 
 fn main() {
-    if let Err(e) = run() {
-        print_err(&e);
-        std::process::exit(1);
-    }
+    run().unwrap_pretty();
 }
 
 /// Error type for the CLI
