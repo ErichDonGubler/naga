@@ -195,7 +195,7 @@ fn main() {
 }
 
 /// Error type for the CLI
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 enum CliError {
     Message(&'static str),
 }
