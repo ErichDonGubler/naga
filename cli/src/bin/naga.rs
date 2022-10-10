@@ -205,9 +205,9 @@ impl fmt::Display for CliError {
         write!(f, "{}", self.0)
     }
 }
-impl std::error::Error for CliError {}
+impl Error for CliError {}
 
-fn run() -> Result<(), Box<dyn std::error::Error>> {
+fn run() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     // Initialize default parameters
