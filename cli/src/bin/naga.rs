@@ -191,7 +191,10 @@ impl<T, E: Error> PrettyResult for Result<T, E> {
 }
 
 fn main() {
-    run().unwrap_pretty();
+    if let Err(e) = run() {
+        print_err(e.as_ref());
+        std::process::exit(1);
+    }
 }
 
 /// Error type for the CLI
@@ -204,7 +207,7 @@ impl fmt::Display for CliError {
 }
 impl Error for CliError {}
 
-fn run() -> Result<(), CliError> {
+fn run() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     // Initialize default parameters
