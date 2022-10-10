@@ -192,7 +192,7 @@ impl<T, E: Error> PrettyResult for Result<T, E> {
 
 fn main() {
     if let Err(e) = run() {
-        print_err(e.as_ref());
+        print_err(&e);
         std::process::exit(1);
     }
 }
@@ -216,7 +216,7 @@ impl From<&'static str> for CliError {
     }
 }
 
-fn run() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<(), CliError> {
     env_logger::init();
 
     // Initialize default parameters
