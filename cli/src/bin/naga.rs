@@ -206,6 +206,11 @@ impl fmt::Display for CliError {
     }
 }
 impl Error for CliError {}
+impl From<&'static str> for CliError {
+    fn from(msg: &'static str) -> Self {
+        Self(msg)
+    }
+}
 
 fn run() -> Result<(), Box<dyn Error>> {
     env_logger::init();
@@ -228,14 +233,14 @@ fn run() -> Result<(), Box<dyn Error>> {
         std::io::stdin().lock().read_to_end(&mut input)?;
         (Path::new(path), input)
     } else {
-        return Err(CliError("Input file path is not specified").into());
+        return Err("Input file path is not specified".into());
     };
     let output_paths = args.files.get(1..).unwrap_or(&[]);
 
     // Update parameters from commandline arguments
     if let Some(bits) = args.validate {
-        params.validation_flags = naga::valid::ValidationFlags::from_bits(bits)
-            .ok_or(CliError("Invalid validation flags"))?;
+        params.validation_flags =
+            naga::valid::ValidationFlags::from_bits(bits).ok_or("Invalid validation flags")?;
     }
     if let Some(policy) = args.index_bounds_check_policy {
         params.bounds_check_policies.index = policy.0;
@@ -260,9 +265,9 @@ fn run() -> Result<(), Box<dyn Error>> {
 
     let (module, input_text) = match Path::new(&input_path)
         .extension()
-        .ok_or(CliError("Input filename has no extension"))?
+        .ok_or("Input filename has no extension")?
         .to_str()
-        .ok_or(CliError("Input filename not valid Unicode"))?
+        .ok_or("Input filename not valid Unicode")?
     {
         "bin" => (bincode::deserialize(&input)?, None),
         "spv" => {
@@ -283,7 +288,7 @@ fn run() -> Result<(), Box<dyn Error>> {
                 Err(ref e) => {
                     let path = input_path.to_string_lossy();
                     e.emit_to_stderr_with_path(&input, &path);
-                    return Err(CliError("Could not parse WGSL").into());
+                    return Err("Could not parse WGSL".into());
                 }
             }
         }
@@ -313,7 +318,7 @@ fn run() -> Result<(), Box<dyn Error>> {
                 Some(input),
             )
         }
-        _ => return Err(CliError("Unknown input file extension").into()),
+        _ => return Err("Unknown input file extension".into()),
     };
 
     // Decide which capabilities our output formats can support.
@@ -357,9 +362,9 @@ fn run() -> Result<(), Box<dyn Error>> {
     for output_path in output_paths {
         match Path::new(&output_path)
             .extension()
-            .ok_or(CliError("Output filename has no extension"))?
+            .ok_or("Output filename has no extension")?
             .to_str()
-            .ok_or(CliError("Output filename not valid unicode"))?
+            .ok_or("Output filename not valid unicode")?
         {
             "txt" => {
                 use std::io::Write;
@@ -384,10 +389,10 @@ fn run() -> Result<(), Box<dyn Error>> {
                 let pipeline_options = msl::PipelineOptions::default();
                 let (msl, _) = msl::write_string(
                     &module,
-                    info.as_ref().ok_or(CliError(
+                    info.as_ref().ok_or(
                         "Generating metal output requires validation to \
                         succeed, and it failed in a previous step",
-                    ))?,
+                    )?,
                     &options,
                     &pipeline_options,
                 )
@@ -422,10 +427,10 @@ fn run() -> Result<(), Box<dyn Error>> {
 
                 let spv = spv::write_vec(
                     &module,
-                    info.as_ref().ok_or(CliError(
+                    info.as_ref().ok_or(
                         "Generating SPIR-V output requires validation to \
                         succeed, and it failed in a previous step",
-                    ))?,
+                    )?,
                     &params.spv,
                     pipeline_options,
                 )
@@ -460,10 +465,10 @@ fn run() -> Result<(), Box<dyn Error>> {
                 let mut writer = glsl::Writer::new(
                     &mut buffer,
                     &module,
-                    info.as_ref().ok_or(CliError(
+                    info.as_ref().ok_or(
                         "Generating glsl output requires validation to \
                         succeed, and it failed in a previous step",
-                    ))?,
+                    )?,
                     &params.glsl,
                     &pipeline_options,
                     params.bounds_check_policies,
@@ -491,10 +496,10 @@ fn run() -> Result<(), Box<dyn Error>> {
                 writer
                     .write(
                         &module,
-                        info.as_ref().ok_or(CliError(
+                        info.as_ref().ok_or(
                             "Generating hlsl output requires validation to \
                             succeed, and it failed in a previous step",
-                        ))?,
+                        )?,
                     )
                     .unwrap_pretty();
                 fs::write(output_path, buffer)?;
@@ -504,10 +509,10 @@ fn run() -> Result<(), Box<dyn Error>> {
 
                 let wgsl = wgsl::write_string(
                     &module,
-                    info.as_ref().ok_or(CliError(
+                    info.as_ref().ok_or(
                         "Generating wgsl output requires validation to \
                         succeed, and it failed in a previous step",
-                    ))?,
+                    )?,
                     wgsl::WriterFlags::empty(),
                 )
                 .unwrap_pretty();
