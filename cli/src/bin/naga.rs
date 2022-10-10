@@ -196,20 +196,16 @@ fn main() {
 
 /// Error type for the CLI
 #[derive(Debug)]
-enum CliError {
-    Message(&'static str),
-}
+struct CliError(&'static str);
 impl fmt::Display for CliError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Message(msg) => write!(f, "{}", msg),
-        }
+        write!(f, "{}", self.0)
     }
 }
 impl Error for CliError {}
 impl From<&'static str> for CliError {
     fn from(msg: &'static str) -> Self {
-        Self::Message(msg)
+        Self(msg)
     }
 }
 
