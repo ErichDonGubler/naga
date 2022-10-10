@@ -262,7 +262,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .extension()
         .ok_or(CliError("Input filename has no extension"))?
         .to_str()
-        .ok_or(CliError("Input filename not valid unicode"))?
+        .ok_or(CliError("Input filename not valid Unicode"))?
     {
         "bin" => (bincode::deserialize(&input)?, None),
         "spv" => {
