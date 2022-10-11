@@ -318,6 +318,14 @@ impl Validator {
         self.reset();
         self.reset_types(module.types.len());
 
+        // TODO: validate all handles in all `Arena`s here.
+
+        // TODO: change call tree beyond here; use `<Arena as Index{,Mut}>` instead of
+        // `Arena::try_get`.
+
+        self.layouter
+            .validate_handles(&module.types, &module.constants)
+            .map_err(|e| e.into_other())?;
         self.layouter
             .update(&module.types, &module.constants)
             .map_err(|e| {
@@ -328,6 +336,8 @@ impl Validator {
         #[cfg(feature = "validate")]
         if self.flags.contains(ValidationFlags::CONSTANTS) {
             for (handle, constant) in module.constants.iter() {
+                self.validate_constant_handles(handle, &module.constants, &module.types)
+                    .map_err(|e| e.into_other())?;
                 self.validate_constant(handle, &module.constants, &module.types)
                     .map_err(|error| {
                         ValidationError::Constant {
@@ -341,6 +351,8 @@ impl Validator {
         }
 
         for (handle, ty) in module.types.iter() {
+            self.validate_type_handles(handle, &module.types, &module.constants)
+                .map_err(|e| e.into_other())?;
             let ty_info = self
                 .validate_type(handle, &module.types, &module.constants)
                 .map_err(|error| {
@@ -356,6 +368,11 @@ impl Validator {
 
         #[cfg(feature = "validate")]
         for (var_handle, var) in module.global_variables.iter() {
+            self.validate_global_var_handles(var, &module.types)
+                .map_err(|e| {
+                    e.with_span_handle(var_handle, &module.global_variables)
+                        .into_other()
+                })?;
             self.validate_global_var(var, &module.types)
                 .map_err(|error| {
                     ValidationError::GlobalVariable {
