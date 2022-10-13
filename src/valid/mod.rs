@@ -323,6 +323,7 @@ impl Validator {
         // TODO: change call tree beyond here; use `<Arena as Index{,Mut}>` instead of
         // `Arena::try_get`.
 
+        // TODO: restructure as structures/macro with phases for the same item close together
         self.layouter
             .validate_handles(&module.types, &module.constants)
             .map_err(|e| e.into_other())?;
