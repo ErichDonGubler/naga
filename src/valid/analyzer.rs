@@ -710,7 +710,7 @@ impl FunctionInfo {
             self.expressions
                 .get(h.index())
                 .map(|ei| &ei.ty)
-                .ok_or(ResolveError::ExpressionForwardDependency(h))
+                .ok_or(ResolveError::ExpressionForwardDependency { dependent: h })
         })?;
         self.expressions[handle.index()] = ExpressionInfo {
             uniformity,

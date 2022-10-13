@@ -195,8 +195,10 @@ pub enum ResolveError {
     IncompatibleOperands(String),
     #[error("Function argument {0} doesn't exist")]
     FunctionArgumentNotFound(u32),
-    #[error("Expression {0:?} depends on expressions that follow")]
-    ExpressionForwardDependency(Handle<crate::Expression>),
+    #[error("Expression {dependent:?} depends on expressions that follow")]
+    ExpressionForwardDependency {
+        dependent: Handle<crate::Expression>,
+    },
 }
 
 pub struct ResolveContext<'a> {
