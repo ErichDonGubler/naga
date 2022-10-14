@@ -284,6 +284,12 @@ void assignment()
     return;
 }
 
+void negate_signed_literals()
+{
+    int unnamed_148 = - -2;
+    int unnamed_149 = --3;
+}
+
 [numthreads(1, 1, 1)]
 void main()
 {

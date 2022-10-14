@@ -251,6 +251,11 @@ fn assignment() {
     return;
 }
 
+fn negate_signed_literals() {
+    _ = -(-2);
+    _ = -(-(3));
+}
+
 @compute @workgroup_size(1, 1, 1) 
 fn main() {
     let _e4 = builtins();

@@ -251,6 +251,11 @@ void assignment() {
     return;
 }
 
+void negate_signed_literals() {
+    int unnamed_148 = (- -2);
+    int unnamed_149 = (-(-3));
+}
+
 void main() {
     vec4 _e4 = builtins();
     vec4 _e5 = splat();
