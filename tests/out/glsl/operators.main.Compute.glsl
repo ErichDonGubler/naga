@@ -256,6 +256,15 @@ void negate_signed_literals() {
     int unnamed_149 = (-(-3));
 }
 
+void chained_negation() {
+    int unnamed_150 = (- -1);
+    int unnamed_151 = (- -2);
+    int unnamed_152 = (-(- -3));
+    int unnamed_153 = (-(-(-(-4))));
+    int unnamed_154 = (-(-(-(- -5))));
+    int unnamed_155 = (-(-(-(- -6))));
+}
+
 void main() {
     vec4 _e4 = builtins();
     vec4 _e5 = splat();
