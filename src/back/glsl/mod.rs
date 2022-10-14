@@ -1527,20 +1527,23 @@ impl<'a, W: Write> Writer<'a, W> {
             crate::ConstantInner::Scalar {
                 width: _,
                 ref value,
-            } => match *value {
-                // Signed integers don't need anything special
-                Sv::Sint(int) => write!(self.out, "{}", int)?,
-                // Unsigned integers need a `u` at the end
-                //
-                // While `core` doesn't necessarily need it, it's allowed and since `es` needs it we
-                // always write it as the extra branch wouldn't have any benefit in readability
-                Sv::Uint(int) => write!(self.out, "{}u", int)?,
-                // Floats are written using `Debug` instead of `Display` because it always appends the
-                // decimal part even it's zero which is needed for a valid glsl float constant
-                Sv::Float(float) => write!(self.out, "{:?}", float)?,
-                // Booleans are either `true` or `false` so nothing special needs to be done
-                Sv::Bool(boolean) => write!(self.out, "{}", boolean)?,
-            },
+            } => {
+                let space_if = |cond| if cond { " " } else { "" };
+                match *value {
+                    // Signed integers don't need anything special
+                    Sv::Sint(int) => write!(self.out, "{}{}", space_if(int < 0), int)?,
+                    // Unsigned integers need a `u` at the end
+                    //
+                    // While `core` doesn't necessarily need it, it's allowed and since `es` needs it we
+                    // always write it as the extra branch wouldn't have any benefit in readability
+                    Sv::Uint(int) => write!(self.out, "{}u", int)?,
+                    // Floats are written using `Debug` instead of `Display` because it always appends the
+                    // decimal part even it's zero which is needed for a valid glsl float constant
+                    Sv::Float(float) => write!(self.out, "{}{:?}", space_if(float < 0.0), float)?,
+                    // Booleans are either `true` or `false` so nothing special needs to be done
+                    Sv::Bool(boolean) => write!(self.out, "{}", boolean)?,
+                }
+            }
             // Composite constant are created using the same syntax as compose
             // `type(components)` where `components` is a comma separated list of constants
             crate::ConstantInner::Composite { ty, ref components } => {
@@ -2490,7 +2493,7 @@ impl<'a, W: Write> Writer<'a, W> {
                 }
             }
             // `Unary` is pretty straightforward
-            // "-" - for `Negate`
+            // " -" - for `Negate`
             // "~" - for `Not` if it's an integer
             // "!" - for `Not` if it's a boolean
             //

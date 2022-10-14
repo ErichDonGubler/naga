@@ -132,20 +132,20 @@ void main() {
     float _e134 = _group_0_binding_0_cs.deltaT;
     vPos = (_e131 + (_e132 * _e134));
     float _e138 = vPos.x;
-    if ((_e138 < -1.0)) {
+    if ((_e138 <  -1.0)) {
         vPos.x = 1.0;
     }
     float _e144 = vPos.x;
     if ((_e144 > 1.0)) {
-        vPos.x = -1.0;
+        vPos.x =  -1.0;
     }
     float _e150 = vPos.y;
-    if ((_e150 < -1.0)) {
+    if ((_e150 <  -1.0)) {
         vPos.y = 1.0;
     }
     float _e156 = vPos.y;
     if ((_e156 > 1.0)) {
-        vPos.y = -1.0;
+        vPos.y =  -1.0;
     }
     vec2 _e164 = vPos;
     _group_0_binding_2_cs.particles[index].pos = _e164;
