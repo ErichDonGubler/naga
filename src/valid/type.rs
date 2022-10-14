@@ -2,6 +2,8 @@ use super::Capabilities;
 use crate::{
     arena::{Arena, BadHandle, Handle, UniqueArena},
     proc::Alignment,
+    span::AddSpan,
+    WithSpan,
 };
 
 bitflags::bitflags! {
@@ -88,8 +90,6 @@ pub enum Disalignment {
 
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum TypeError {
-    #[error(transparent)]
-    BadHandle(#[from] BadHandle),
     #[error("The {0:?} scalar width {1} is not supported")]
     InvalidWidth(crate::ScalarKind, crate::Bytes),
     #[error("The {0:?} scalar width {1} is not supported for an atomic")]
@@ -217,6 +217,25 @@ impl super::Validator {
         self.types.clear();
         self.types.resize(size, TypeInfo::dummy());
         self.layouter.clear();
+    }
+
+    pub(super) fn validate_type_handles(
+        &self,
+        handle: Handle<crate::Type>,
+        types: &UniqueArena<crate::Type>,
+        constants: &Arena<crate::Constant>,
+    ) -> Result<(), WithSpan<BadHandle>> {
+        match types[handle].inner {
+            crate::TypeInner::Array {
+                base: _,
+                size: crate::ArraySize::Constant(const_handle),
+                stride: _,
+            } => constants
+                .try_get(const_handle)
+                .map(|_| ())
+                .map_err(|e| e.with_span_handle(const_handle, constants)),
+            _ => Ok(()),
+        }
     }
 
     pub(super) fn validate_type(
@@ -418,7 +437,7 @@ impl super::Validator {
 
                 let sized_flag = match size {
                     crate::ArraySize::Constant(const_handle) => {
-                        let constant = constants.try_get(const_handle)?;
+                        let constant = &constants[const_handle];
                         let length_is_positive = match *constant {
                             crate::Constant {
                                 specialization: Some(_),

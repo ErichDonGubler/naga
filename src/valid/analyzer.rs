@@ -706,6 +706,9 @@ impl FunctionInfo {
             },
         };
 
+        // FIXME: Break out this layer below into its own API. We can rebuild this layer on top of
+        // it once that's done.
+
         let ty = resolve_context.resolve(expression, |h| {
             self.expressions
                 .get(h.index())

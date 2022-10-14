@@ -1,4 +1,7 @@
-use crate::arena::{Arena, BadHandle, Handle, UniqueArena};
+use crate::{
+    arena::{Arena, BadHandle, Handle, UniqueArena},
+    WithSpan,
+};
 use std::{fmt::Display, num::NonZeroU32, ops};
 
 /// A newtype struct where its only valid values are powers of 2
@@ -130,8 +133,6 @@ pub enum LayoutErrorInner {
     InvalidStructMemberType(u32, Handle<crate::Type>),
     #[error("Type width must be a power of two")]
     NonPowerOfTwoWidth,
-    #[error("Array size is a bad handle")]
-    BadHandle(#[from] BadHandle),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, thiserror::Error)]
@@ -153,6 +154,20 @@ impl Layouter {
         self.layouts.clear();
     }
 
+    pub fn validate_handles(
+        &mut self,
+        types: &UniqueArena<crate::Type>,
+        constants: &Arena<crate::Constant>,
+    ) -> Result<(), WithSpan<BadHandle>> {
+        types
+            .iter()
+            .skip(self.layouts.len())
+            .try_for_each(|(_handle, ty)| {
+                // TODO: track the type we fail on?
+                ty.inner.validate_handles(constants)
+            })
+    }
+
     /// Extend this `Layouter` with layouts for any new entries in `types`.
     ///
     /// Ensure that every type in `types` has a corresponding [TypeLayout] in
@@ -166,7 +181,13 @@ impl Layouter {
     /// end can call this function at any time, passing its current type and
     /// constant arenas, and then assume that layouts are available for all
     /// types.
+    ///
+    /// # Panics
+    ///
+    /// If `types` contains invalid [`Handle`]s to `constants`, then this function will panic. You
+    /// can check for this condition by calling [`Self::validate_handles`].
     #[allow(clippy::or_fun_call)]
+    #[track_caller]
     pub fn update(
         &mut self,
         types: &UniqueArena<crate::Type>,
@@ -175,10 +196,8 @@ impl Layouter {
         use crate::TypeInner as Ti;
 
         for (ty_handle, ty) in types.iter().skip(self.layouts.len()) {
-            let size = ty
-                .inner
-                .try_size(constants)
-                .map_err(|error| LayoutErrorInner::BadHandle(error).with(ty_handle))?;
+            // phase-id: layouter
+            let size = ty.inner.size(constants);
             let layout = match ty.inner {
                 Ti::Scalar { width, .. } | Ti::Atomic { width, .. } => {
                     let alignment = Alignment::new(width as u32)
@@ -255,3 +274,52 @@ impl Layouter {
         Ok(())
     }
 }
+
+// #[derive(Debug)]
+// struct HandlesValidated<T>(T);
+
+// impl<T> HandlesValidated<T> {
+//     pub const fn new(t: T) -> Self {
+//         Self(t)
+//     }
+// }
+
+// impl<'a, T> Clone for HandlesValidated<&'a T> {
+//     fn clone(&self) -> Self {
+//         let Self(ref_) = self;
+//         Self(ref_)
+//     }
+// }
+
+// impl<'a, T> Copy for HandlesValidated<&'a T> {}
+
+// impl<'a, T> AsRef<T> for HandlesValidated<&'a T> {
+//     fn as_ref(&self) -> &T {
+//         todo!()
+//     }
+// }
+
+// impl<'a, T> Deref for HandlesValidated<&'a T> {
+//     type Target = T;
+
+//     fn deref(&self) -> &Self::Target {
+//         let Self(inner) = self;
+//         inner
+//     }
+// }
+
+// impl<'a, T> Deref for HandlesValidated<&'a mut T> {
+//     type Target = T;
+
+//     fn deref(&self) -> &Self::Target {
+//         let Self(inner) = self;
+//         inner
+//     }
+// }
+
+// impl<'a, T> DerefMut for HandlesValidated<&'a mut T> {
+//     fn deref_mut(&mut self) -> &mut Self::Target {
+//         let Self(inner) = self;
+//         inner
+//     }
+// }

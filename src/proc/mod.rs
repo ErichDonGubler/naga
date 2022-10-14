@@ -16,6 +16,8 @@ pub use namer::{EntryPointIndex, NameKey, Namer};
 pub use terminator::ensure_block_returns;
 pub use typifier::{ResolveContext, ResolveError, TypeResolution};
 
+use crate::{arena::BadHandle, WithSpan};
+
 impl From<super::StorageFormat> for super::ScalarKind {
     fn from(format: super::StorageFormat) -> Self {
         use super::{ScalarKind as Sk, StorageFormat as Sf};
@@ -97,11 +99,32 @@ impl super::TypeInner {
         }
     }
 
-    pub fn try_size(
+    pub fn validate_handles(
         &self,
         constants: &super::Arena<super::Constant>,
-    ) -> Result<u32, crate::arena::BadHandle> {
-        Ok(match *self {
+    ) -> Result<(), WithSpan<BadHandle>> {
+        match self {
+            &Self::Array {
+                base: _,
+                size: super::ArraySize::Constant(handle),
+                stride: _,
+            } => constants
+                .try_get(handle)
+                .map(|_| ())
+                .map_err(|e| WithSpan::new(e).with_handle(handle, constants)),
+            _ => Ok(()),
+        }
+    }
+
+    /// Get the size of this type.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the `constants` doesn't contain a referenced handle. This may not happen in
+    /// a properly validated IR module. You can check for this condition with
+    /// [`Self::validate_handles`].
+    pub fn size(&self, constants: &super::Arena<super::Constant>) -> u32 {
+        match *self {
             Self::Scalar { kind: _, width } | Self::Atomic { kind: _, width } => width as u32,
             Self::Vector {
                 size,
@@ -122,8 +145,7 @@ impl super::TypeInner {
             } => {
                 let count = match size {
                     super::ArraySize::Constant(handle) => {
-                        let constant = constants.try_get(handle)?;
-                        constant.to_array_length().unwrap_or(1)
+                        constants[handle].to_array_length().unwrap_or(1)
                     }
                     // A dynamically-sized array has to have at least one element
                     super::ArraySize::Dynamic => 1,
@@ -132,13 +154,7 @@ impl super::TypeInner {
             }
             Self::Struct { span, .. } => span,
             Self::Image { .. } | Self::Sampler { .. } | Self::BindingArray { .. } => 0,
-        })
-    }
-
-    /// Get the size of this type. Panics if the `constants` doesn't contain
-    /// a referenced handle. This may not happen in a properly validated IR module.
-    pub fn size(&self, constants: &super::Arena<super::Constant>) -> u32 {
-        self.try_size(constants).unwrap()
+        }
     }
 
     /// Return the canonical form of `self`, or `None` if it's already in

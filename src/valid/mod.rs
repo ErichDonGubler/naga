@@ -143,8 +143,6 @@ pub struct Validator {
 
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum ConstantError {
-    #[error(transparent)]
-    BadHandle(#[from] BadHandle),
     #[error("The type doesn't match the constant")]
     InvalidType,
     #[error("The component handle {0:?} can not be resolved")]
@@ -157,6 +155,9 @@ pub enum ConstantError {
 
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum ValidationError {
+    // TODO: I hate these diagnostics.
+    #[error(transparent)]
+    InvalidHandle(#[from] InvalidHandleError),
     #[error(transparent)]
     Layouter(#[from] LayoutError),
     #[error("Type {handle:?} '{name}' is invalid")]
@@ -196,6 +197,13 @@ pub enum ValidationError {
     },
     #[error("Module is corrupted")]
     Corrupted,
+}
+
+// TODO: remove this
+impl From<BadHandle> for ValidationError {
+    fn from(e: BadHandle) -> Self {
+        Self::InvalidHandle(e.into())
+    }
 }
 
 impl crate::TypeInner {
@@ -271,6 +279,22 @@ impl Validator {
     }
 
     #[cfg(feature = "validate")]
+    fn validate_constant_handles(
+        &self,
+        handle: Handle<crate::Constant>,
+        constants: &Arena<crate::Constant>,
+        types: &UniqueArena<crate::Type>,
+    ) -> Result<(), WithSpan<BadHandle>> {
+        match &constants[handle].inner {
+            &crate::ConstantInner::Composite { ty, components: _ } => types
+                .get_handle(ty)
+                .map(|_| ())
+                .map_err(|e| e.with_span_handle(ty, types)),
+            _ => Ok(()),
+        }
+    }
+
+    #[cfg(feature = "validate")]
     fn validate_constant(
         &self,
         handle: Handle<crate::Constant>,
@@ -285,7 +309,7 @@ impl Validator {
                 }
             }
             crate::ConstantInner::Composite { ty, ref components } => {
-                match types.get_handle(ty)?.inner {
+                match types[ty].inner {
                     crate::TypeInner::Array {
                         size: crate::ArraySize::Constant(size_handle),
                         ..
@@ -369,11 +393,10 @@ impl Validator {
 
         #[cfg(feature = "validate")]
         for (var_handle, var) in module.global_variables.iter() {
-            self.validate_global_var_handles(var, &module.types)
-                .map_err(|e| {
-                    e.with_span_handle(var_handle, &module.global_variables)
-                        .into_other()
-                })?;
+            self.validate_global_var_handles(var).map_err(|e| {
+                e.with_span_handle(var_handle, &module.global_variables)
+                    .into_other()
+            })?;
             self.validate_global_var(var, &module.types)
                 .map_err(|error| {
                     ValidationError::GlobalVariable {
@@ -391,6 +414,8 @@ impl Validator {
         };
 
         for (handle, fun) in module.functions.iter() {
+            self.validate_function_handles(fun, module, &mod_info)
+                .map_err(|e| e.with_handle(handle, &module.functions).into_other())?;
             match self.validate_function(fun, module, &mod_info, false) {
                 Ok(info) => mod_info.functions.push(info),
                 Err(error) => {
@@ -434,4 +459,20 @@ impl Validator {
 
         Ok(mod_info)
     }
+}
+
+// TODO: use a more concrete model for better diagnostics?
+#[derive(Clone, Debug, thiserror::Error)]
+pub enum InvalidHandleError {
+    #[error(transparent)]
+    Bad(#[from] BadHandle),
+    #[error(transparent)]
+    ExpressionWithForwardDependency(#[from] ExprFwdDepError),
+}
+
+// TODO: use a more concrete model for better diagnostics?
+#[derive(Clone, Debug, thiserror::Error)]
+#[error("Depends on {depends_on:?}, which has not been processed yet")]
+pub struct ExprFwdDepError {
+    depends_on: Handle<crate::Expression>,
 }

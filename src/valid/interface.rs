@@ -12,8 +12,6 @@ const MAX_WORKGROUP_SIZE: u32 = 0x4000;
 
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum GlobalVariableError {
-    #[error(transparent)]
-    BadHandle(#[from] BadHandle),
     #[error("Usage isn't compatible with address space {0:?}")]
     InvalidUsage(crate::AddressSpace),
     #[error("Type isn't compatible with address space {0:?}")]
@@ -356,6 +354,18 @@ impl VaryingContext<'_> {
 
 impl super::Validator {
     #[cfg(feature = "validate")]
+    pub(super) fn validate_global_var_handles(
+        &self,
+        var: &crate::GlobalVariable,
+    ) -> Result<(), BadHandle> {
+        let index = var.ty.index();
+        self.types.get(index).map(|_| ()).ok_or(BadHandle {
+            kind: "type",
+            index,
+        })
+    }
+
+    #[cfg(feature = "validate")]
     pub(super) fn validate_global_var(
         &self,
         var: &crate::GlobalVariable,
@@ -364,10 +374,7 @@ impl super::Validator {
         use super::TypeFlags;
 
         log::debug!("var {:?}", var);
-        let type_info = self.types.get(var.ty.index()).ok_or_else(|| BadHandle {
-            kind: "type",
-            index: var.ty.index(),
-        })?;
+        let type_info = &self.types[var.ty.index()];
 
         let (required_type_flags, is_resource) = match var.space {
             crate::AddressSpace::Function => {

@@ -162,8 +162,6 @@ impl crate::ConstantInner {
 
 #[derive(Clone, Debug, Error, PartialEq)]
 pub enum ResolveError {
-    #[error(transparent)]
-    BadHandle(#[from] BadHandle),
     #[error("Index {index} is out of bounds for expression {expr:?}")]
     OutOfBoundsIndex {
         expr: Handle<crate::Expression>,
@@ -211,6 +209,15 @@ pub struct ResolveContext<'a> {
 }
 
 impl<'a> ResolveContext<'a> {
+    pub fn validate_resolution_handles(&self, expr: &crate::Expression) -> Result<(), BadHandle> {
+        match *expr {
+            crate::Expression::Constant(h) => self.constants.try_get(h).map(|_| ()),
+            crate::Expression::GlobalVariable(h) => self.global_vars.try_get(h).map(|_| ()),
+            crate::Expression::LocalVariable(h) => self.local_vars.try_get(h).map(|_| ()),
+            _ => Ok(()),
+        }
+    }
+
     /// Determine the type of `expr`.
     ///
     /// The `past` argument must be a closure that can resolve the types of any
@@ -405,20 +412,15 @@ impl<'a> ResolveContext<'a> {
                     }
                 }
             }
-            crate::Expression::Constant(h) => {
-                let constant = self.constants.try_get(h)?;
-                match constant.inner {
-                    crate::ConstantInner::Scalar { width, ref value } => {
-                        TypeResolution::Value(Ti::Scalar {
-                            kind: value.scalar_kind(),
-                            width,
-                        })
-                    }
-                    crate::ConstantInner::Composite { ty, components: _ } => {
-                        TypeResolution::Handle(ty)
-                    }
+            crate::Expression::Constant(h) => match self.constants[h].inner {
+                crate::ConstantInner::Scalar { width, ref value } => {
+                    TypeResolution::Value(Ti::Scalar {
+                        kind: value.scalar_kind(),
+                        width,
+                    })
                 }
-            }
+                crate::ConstantInner::Composite { ty, components: _ } => TypeResolution::Handle(ty),
+            },
             crate::Expression::Splat { size, value } => match *past(value)?.inner_with(types) {
                 Ti::Scalar { kind, width } => {
                     TypeResolution::Value(Ti::Vector { size, kind, width })
@@ -452,7 +454,7 @@ impl<'a> ResolveContext<'a> {
                 TypeResolution::Handle(arg.ty)
             }
             crate::Expression::GlobalVariable(h) => {
-                let var = self.global_vars.try_get(h)?;
+                let var = &self.global_vars[h];
                 if var.space == crate::AddressSpace::Handle {
                     TypeResolution::Handle(var.ty)
                 } else {
@@ -463,7 +465,7 @@ impl<'a> ResolveContext<'a> {
                 }
             }
             crate::Expression::LocalVariable(h) => {
-                let var = self.local_vars.try_get(h)?;
+                let var = &self.local_vars[h];
                 TypeResolution::Value(Ti::Pointer {
                     base: var.ty,
                     space: crate::AddressSpace::Function,
