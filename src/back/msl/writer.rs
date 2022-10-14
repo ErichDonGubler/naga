@@ -324,11 +324,11 @@ impl<'a> Display for ConstantContext<'a> {
             return write!(out, "{}", name);
         }
 
+        let space_if = |cond| if cond { " " } else { "" };
         match con.inner {
             crate::ConstantInner::Scalar { value, width: _ } => match value {
                 crate::ScalarValue::Sint(value) => {
-                    let space = if value < 0 { " " } else { "" };
-                    write!(out, "{}{}", space, value)
+                    write!(out, "{}{}", space_if(value < 0), value)
                 }
                 crate::ScalarValue::Uint(value) => {
                     write!(out, "{}u", value)
@@ -340,9 +340,8 @@ impl<'a> Display for ConstantContext<'a> {
                     } else if value.is_nan() {
                         write!(out, "NAN")
                     } else {
-                        let space = if value < 0.0 { " " } else { "" };
                         let suffix = if value.fract() == 0.0 { ".0" } else { "" };
-                        write!(out, "{}{}{}", space, value, suffix)
+                        write!(out, "{}{}{}", space_if(value < 0.0), value, suffix)
                     }
                 }
                 crate::ScalarValue::Bool(value) => {
