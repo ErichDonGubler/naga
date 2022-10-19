@@ -6,6 +6,7 @@ mod analyzer;
 mod compose;
 mod expression;
 mod function;
+mod handles;
 mod interface;
 mod r#type;
 
@@ -18,7 +19,7 @@ use crate::{
     FastHashSet,
 };
 use bit_set::BitSet;
-use std::ops;
+use std::{ops, sync::Arc};
 
 //TODO: analyze the model at the same time as we validate it,
 // merge the corresponding matches over expressions and statements.
@@ -30,6 +31,8 @@ pub use expression::ExpressionError;
 pub use function::{CallError, FunctionError, LocalVariableError};
 pub use interface::{EntryPointError, GlobalVariableError, VaryingError};
 pub use r#type::{Disalignment, TypeError, TypeFlags};
+
+use self::handles::InvalidHandleError;
 
 bitflags::bitflags! {
     /// Validation flags.
@@ -157,7 +160,7 @@ pub enum ConstantError {
 pub enum ValidationError {
     // TODO: I hate these diagnostics.
     #[error(transparent)]
-    InvalidHandle(#[from] InvalidHandleError),
+    InvalidHandle(#[from] Arc<InvalidHandleError>),
     #[error(transparent)]
     Layouter(#[from] LayoutError),
     #[error("Type {handle:?} '{name}' is invalid")]
@@ -202,7 +205,7 @@ pub enum ValidationError {
 // TODO: remove this
 impl From<BadHandle> for ValidationError {
     fn from(e: BadHandle) -> Self {
-        Self::InvalidHandle(e.into())
+        Self::InvalidHandle(Arc::new(e.into()))
     }
 }
 
@@ -339,18 +342,13 @@ impl Validator {
         &mut self,
         module: &crate::Module,
     ) -> Result<ModuleInfo, WithSpan<ValidationError>> {
+        Self::validate_module_handles(module).unwrap(); // TODO: y u no `return`
+
         self.reset();
         self.reset_types(module.types.len());
 
-        // TODO: validate all handles in all `Arena`s here.
-
         // TODO: change call tree beyond here; use `<Arena as Index{,Mut}>` instead of
         // `Arena::try_get`.
-
-        // TODO: restructure as structures/macro with phases for the same item close together
-        self.layouter
-            .validate_handles(&module.types, &module.constants)
-            .map_err(|e| e.into_other())?;
         self.layouter
             .update(&module.types, &module.constants)
             .map_err(|e| {
@@ -361,8 +359,6 @@ impl Validator {
         #[cfg(feature = "validate")]
         if self.flags.contains(ValidationFlags::CONSTANTS) {
             for (handle, constant) in module.constants.iter() {
-                self.validate_constant_handles(handle, &module.constants, &module.types)
-                    .map_err(|e| e.into_other())?;
                 self.validate_constant(handle, &module.constants, &module.types)
                     .map_err(|error| {
                         ValidationError::Constant {
@@ -376,8 +372,6 @@ impl Validator {
         }
 
         for (handle, ty) in module.types.iter() {
-            self.validate_type_handles(handle, &module.types, &module.constants)
-                .map_err(|e| e.into_other())?;
             let ty_info = self
                 .validate_type(handle, &module.types, &module.constants)
                 .map_err(|error| {
@@ -393,10 +387,6 @@ impl Validator {
 
         #[cfg(feature = "validate")]
         for (var_handle, var) in module.global_variables.iter() {
-            self.validate_global_var_handles(var).map_err(|e| {
-                e.with_span_handle(var_handle, &module.global_variables)
-                    .into_other()
-            })?;
             self.validate_global_var(var, &module.types)
                 .map_err(|error| {
                     ValidationError::GlobalVariable {
@@ -414,8 +404,6 @@ impl Validator {
         };
 
         for (handle, fun) in module.functions.iter() {
-            self.validate_function_handles(fun, module, &mod_info)
-                .map_err(|e| e.with_handle(handle, &module.functions).into_other())?;
             match self.validate_function(fun, module, &mod_info, false) {
                 Ok(info) => mod_info.functions.push(info),
                 Err(error) => {
@@ -459,20 +447,4 @@ impl Validator {
 
         Ok(mod_info)
     }
-}
-
-// TODO: use a more concrete model for better diagnostics?
-#[derive(Clone, Debug, thiserror::Error)]
-pub enum InvalidHandleError {
-    #[error(transparent)]
-    Bad(#[from] BadHandle),
-    #[error(transparent)]
-    ExpressionWithForwardDependency(#[from] ExprFwdDepError),
-}
-
-// TODO: use a more concrete model for better diagnostics?
-#[derive(Clone, Debug, thiserror::Error)]
-#[error("Depends on {depends_on:?}, which has not been processed yet")]
-pub struct ExprFwdDepError {
-    depends_on: Handle<crate::Expression>,
 }

@@ -4,7 +4,7 @@ use crate::arena::{BadHandle, Handle};
 
 use super::{
     analyzer::{UniformityDisruptor, UniformityRequirements},
-    ExpressionError, FunctionInfo, InvalidHandleError, ModuleInfo,
+    ExpressionError, FunctionInfo, ModuleInfo,
 };
 use crate::span::WithSpan;
 #[cfg(feature = "validate")]
@@ -944,44 +944,6 @@ impl super::Validator {
                     }
                 }
             }
-        }
-        Ok(())
-    }
-
-    pub(super) fn validate_function_handles(
-        &mut self,
-        fun: &crate::Function,
-        module: &crate::Module,
-        mod_info: &ModuleInfo,
-    ) -> Result<(), WithSpan<InvalidHandleError>> {
-        // FIXME: Break out expression type resolution from `FunctionInfo`'s analyses, just consume
-        // that here instead.
-        #[cfg_attr(not(feature = "validate"), allow(unused_mut))]
-        let mut info = mod_info.process_function(fun, module, self.flags, self.capabilities)?;
-
-        fun.arguments
-            .iter()
-            .try_for_each(|argument| {
-                module
-                    .types
-                    .get_handle(argument.ty)
-                    .map(|_| ())
-                    .map_err(|e| e.with_span_handle(argument.ty, &module.types))
-            })
-            .map_err(|e| e.into_other())?;
-
-        #[cfg(feature = "validate")]
-        if self.flags.contains(super::ValidationFlags::EXPRESSIONS) {
-            for (handle, expr) in fun.expressions.iter() {
-                self.validate_expression_handles(handle, expr, fun, module, &info)
-                    .map_err(|e| e.with_span_handle(handle, &fun.expressions))?;
-            }
-        }
-
-        #[cfg(feature = "validate")]
-        if self.flags.contains(super::ValidationFlags::BLOCKS) {
-            self.validate_block_handles(&fun.body, &fun.expressions, &module.functions)
-                .map_err(|e| e.into_other())?;
         }
         Ok(())
     }

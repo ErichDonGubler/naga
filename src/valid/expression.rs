@@ -2,14 +2,12 @@ use std::ops::Index;
 
 #[cfg(feature = "validate")]
 use super::{compose::validate_compose, FunctionInfo, ShaderStages, TypeFlags};
-use super::{ExprFwdDepError, InvalidHandleError};
 #[cfg(feature = "validate")]
 use crate::arena::UniqueArena;
 
 use crate::{
     arena::Handle,
     proc::{IndexableLengthError, ResolveError},
-    valid::compose::validate_compose_handles,
 };
 
 #[derive(Clone, Debug, thiserror::Error)]
@@ -130,178 +128,23 @@ struct ExpressionTypeResolver<'a> {
 }
 
 #[cfg(feature = "validate")]
-impl<'a> ExpressionTypeResolver<'a> {
-    /// TODO: document intended usage
-    // TODO: make this just return a `()` as a checking feature
-    fn resolve(
-        &self,
-        handle: Handle<crate::Expression>,
-    ) -> Result<&'a crate::TypeInner, ExprFwdDepError> {
-        if handle < self.root {
-            Ok(self.info[handle].ty.inner_with(self.types))
-        } else {
-            Err(ExprFwdDepError {
-                depends_on: self.root,
-            }) // TODO: Should this be `self.root`?
-        }
-    }
-
-    /// TODO: document intended usage
-    fn check(&self, handle: Handle<crate::Expression>) -> Result<(), ExprFwdDepError> {
-        self.resolve(handle).map(|_| ())
-    }
-}
-
-#[cfg(feature = "validate")]
 impl<'a> Index<Handle<crate::Expression>> for ExpressionTypeResolver<'a> {
     type Output = crate::TypeInner;
 
     fn index(&self, handle: Handle<crate::Expression>) -> &Self::Output {
-        self.resolve(handle).unwrap()
+        if handle < self.root {
+            self.info[handle].ty.inner_with(self.types)
+        } else {
+            panic!(
+                "Depends on {:?}, which has not been processed yet",
+                self.root
+            )
+        }
     }
 }
 
 #[cfg(feature = "validate")]
 impl super::Validator {
-    pub(super) fn validate_expression_handles(
-        &self,
-        root: Handle<crate::Expression>,
-        expression: &crate::Expression,
-        function: &crate::Function,
-        module: &crate::Module,
-        info: &FunctionInfo,
-    ) -> Result<(), InvalidHandleError> {
-        use crate::{Expression as E, TypeInner as Ti};
-
-        let resolver = ExpressionTypeResolver {
-            root,
-            types: &module.types,
-            info,
-        };
-
-        // NOTE: TODO: nag to keep in sync
-        match *expression {
-            E::Access { base, index } => {
-                resolver.check(base)?;
-                resolver.check(index)?;
-            }
-            E::AccessIndex { base, index: _ } => resolver.check(base)?,
-            E::Constant(handle) => module.constants.try_get(handle).map(|_| ())?,
-            E::Splat { size: _, value } => resolver.check(value)?,
-            E::Swizzle {
-                size: _,
-                vector,
-                pattern: _,
-            } => resolver.check(vector)?,
-            E::Compose { ty, ref components } => {
-                for &handle in components {
-                    if handle >= root {
-                        return Err(ExprFwdDepError { depends_on: handle }.into());
-                    }
-                }
-                validate_compose_handles(ty, &module.types)?;
-            }
-            E::FunctionArgument(_) => (),
-            E::GlobalVariable(handle) => module.global_variables.try_get(handle).map(|_| ())?,
-            E::LocalVariable(handle) => function.local_variables.try_get(handle).map(|_| ())?,
-            E::Load { pointer } => resolver.check(pointer)?,
-            E::ImageSample {
-                image,
-                coordinate,
-                sampler,
-                array_index,
-                depth_ref,
-                level,
-                ..
-            } => {
-                if let Ok(image_ty) = Self::global_var_ty(module, function, image) {
-                    if let Ti::Image { .. } = module.types[image_ty].inner {
-                        if let Some(expr) = array_index {
-                            resolver.check(expr)?;
-                            resolver.check(coordinate)?;
-                            if let Some(expr) = depth_ref {
-                                resolver.check(expr)?;
-                            }
-                            match level {
-                                crate::SampleLevel::Auto | crate::SampleLevel::Zero => (),
-                                crate::SampleLevel::Exact(expr) => {
-                                    resolver.check(expr)?;
-                                }
-                                crate::SampleLevel::Bias(expr) => resolver.check(expr)?,
-                                crate::SampleLevel::Gradient { x, y } => {
-                                    resolver.check(x)?;
-                                    resolver.check(y)?;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            E::ImageLoad {
-                image,
-                coordinate,
-                array_index,
-                sample,
-                level,
-            } => {
-                if let Ok(image_ty) = Self::global_var_ty(module, function, image) {
-                    if let Ti::Image { class, .. } = module.types[image_ty].inner {
-                        if let Some(expr) = array_index {
-                            resolver.check(coordinate)?;
-                            resolver.check(expr)?;
-                            if let (Some(sample), true) = (sample, class.is_multisampled()) {
-                                resolver.check(sample)?;
-                            }
-                            if let (Some(level), true) = (level, class.is_mipmapped()) {
-                                resolver.check(level)?;
-                            }
-                        }
-                    }
-                }
-            }
-            E::ImageQuery { .. } => (),
-            E::Unary { expr, op: _ } => resolver.check(expr)?,
-            E::Binary { op: _, left, right } => {
-                resolver.check(left)?;
-                resolver.check(right)?;
-            }
-            E::Select {
-                condition,
-                accept,
-                reject,
-            } => {
-                resolver.check(accept)?;
-                resolver.check(reject)?;
-                resolver.check(condition)?;
-            }
-            E::Derivative { axis: _, expr } => resolver.check(expr)?,
-            E::Relational { fun: _, argument } => resolver.check(argument)?,
-            E::Math {
-                fun: _,
-                arg,
-                arg1,
-                arg2,
-                arg3,
-            } => {
-                resolver.check(arg)?;
-                IntoIterator::into_iter([arg1, arg2, arg3])
-                    .flatten()
-                    .try_for_each(|a| resolver.check(a))?;
-            }
-            E::As {
-                expr,
-                kind: _,
-                convert: _,
-            } => resolver.check(expr)?,
-            E::CallResult(_) | E::AtomicResult { .. } => (),
-            E::ArrayLength(expr) => match resolver.resolve(expr)? {
-                Ti::Pointer { base, .. } => resolver.types.get_handle(*base).map(|_| ())?,
-                _ => (),
-            },
-        };
-        Ok(())
-    }
-
     pub(super) fn validate_expression(
         &self,
         root: Handle<crate::Expression>,
@@ -421,7 +264,7 @@ impl super::Validator {
                 }
                 ShaderStages::all()
             }
-            E::Constant(handle) => ShaderStages::all(),
+            E::Constant(_handle) => ShaderStages::all(),
             E::Splat { size: _, value } => match resolver[value] {
                 Ti::Scalar { .. } => ShaderStages::all(),
                 ref other => {
@@ -463,8 +306,8 @@ impl super::Validator {
                 }
                 ShaderStages::all()
             }
-            E::GlobalVariable(handle) => ShaderStages::all(),
-            E::LocalVariable(handle) => ShaderStages::all(),
+            E::GlobalVariable(_handle) => ShaderStages::all(),
+            E::LocalVariable(_handle) => ShaderStages::all(),
             E::Load { pointer } => {
                 match resolver[pointer] {
                     Ti::Pointer { base, .. }
@@ -754,7 +597,7 @@ impl super::Validator {
             }
             E::Unary { op, expr } => {
                 use crate::UnaryOperator as Uo;
-                let inner = resolver[expr];
+                let inner = &resolver[expr];
                 match (op, inner.scalar_kind()) {
                     (_, Some(Sk::Sint | Sk::Bool))
                     //TODO: restrict Negate for bools?
@@ -1548,7 +1391,7 @@ impl super::Validator {
             }
             E::ArrayLength(expr) => match resolver[expr] {
                 Ti::Pointer { base, .. } => {
-                    let base_ty = resolver.types[base];
+                    let base_ty = &resolver.types[base];
                     if let Ti::Array {
                         size: crate::ArraySize::Dynamic,
                         ..

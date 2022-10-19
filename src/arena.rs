@@ -321,6 +321,12 @@ impl<T> Arena<T> {
             Span::default()
         }
     }
+
+    pub fn check_contains_handle(&self, handle: Handle<T>) -> Result<(), BadHandle> {
+        (handle.index() < self.data.len())
+            .then_some(())
+            .ok_or_else(|| BadHandle::new(handle))
+    }
 }
 
 #[cfg(feature = "deserialize")]
@@ -543,6 +549,12 @@ impl<T: Eq + hash::Hash> UniqueArena<T> {
     pub fn get_handle(&self, handle: Handle<T>) -> Result<&T, BadHandle> {
         self.set
             .get_index(handle.index())
+            .ok_or_else(|| BadHandle::new(handle))
+    }
+
+    pub fn check_contains_handle(&self, handle: Handle<T>) -> Result<(), BadHandle> {
+        (handle.index() < self.set.len())
+            .then_some(())
             .ok_or_else(|| BadHandle::new(handle))
     }
 }
