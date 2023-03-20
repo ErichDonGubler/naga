@@ -12,4 +12,9 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - run: make validate-msl
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            xtask -> target
+
+      - run: cargo xtask validate msl
