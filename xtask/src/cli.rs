@@ -9,6 +9,7 @@ Usage: xtask <COMMAND>
 Commands:
   all
   bench [--clean]
+  clean
   validate
     dot
     glsl
@@ -51,6 +52,7 @@ impl Args {
 #[derive(Debug)]
 pub(crate) enum Subcommand {
     All,
+    Clean,
     Bench { clean: bool },
     Validate(ValidateSubcommand),
 }
@@ -64,6 +66,10 @@ impl Subcommand {
                 Some("all") => {
                     ensure_remaining_args_empty(args)?;
                     Ok(Self::All)
+                }
+                Some("clean") => {
+                    ensure_remaining_args_empty(args)?;
+                    Ok(Self::Clean)
                 }
                 Some("bench") => {
                     let clean = args.contains("--clean");

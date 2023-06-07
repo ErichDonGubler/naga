@@ -9,7 +9,7 @@ use cli::Args;
 
 use crate::{
     cli::{Subcommand, ValidateHlslCommand, ValidateSubcommand},
-    fs::{open_file, remove_dir_all},
+    fs::{open_file, remove_dir_all, remove_file},
     glob::visit_files,
     path::join_path,
     process::{which, EasyCommand},
@@ -64,6 +64,22 @@ fn run(args: Args) -> anyhow::Result<()> {
                 ],
             )
             .success()?;
+            Ok(())
+        }
+        Subcommand::Clean => {
+            let mut found_err = false;
+            visit_files(
+                ".",
+                "*.{metal,air,metallib,vert,frag,comp,spv}",
+                &mut found_err,
+                |file, _| {
+                    remove_file(file).with_context(|| format!("failed to remove file {file:?}"))
+                },
+            );
+            ensure!(
+                !found_err,
+                "failed to clean one or more files, see above output for more details"
+            );
             Ok(())
         }
         Subcommand::Bench { clean } => {
