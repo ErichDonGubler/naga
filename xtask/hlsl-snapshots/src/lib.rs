@@ -1,48 +1,20 @@
-use std::{error::Error, fmt::Display, fs, io, path::Path};
+use std::{fs, io, path::Path};
 
 use anyhow::{anyhow, ensure};
 use nanoserde::{self, DeRon, DeRonErr, SerRon};
 
-#[derive(Debug)]
-struct BadRonParse(BadRonParseKind);
+#[derive(Debug, thiserror::Error)]
+#[error("failed to read RON configuration of HLSL snapshot test")]
+struct BadRonParse(#[source] BadRonParseKind);
 
-impl Display for BadRonParse {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "failed to read RON configuration of HLSL snapshot test")
-    }
-}
-
-impl Error for BadRonParse {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        Some(&self.0)
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 enum BadRonParseKind {
+    #[error(transparent)]
     Read { source: io::Error },
+    #[error(transparent)]
     Parse { source: DeRonErr },
+    #[error("no configuration was specified")]
     Empty,
-}
-
-impl Display for BadRonParseKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            BadRonParseKind::Read { source } => Display::fmt(source, f),
-            BadRonParseKind::Parse { source } => Display::fmt(source, f),
-            BadRonParseKind::Empty => write!(f, "no configuration was specified"),
-        }
-    }
-}
-
-impl Error for BadRonParseKind {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            BadRonParseKind::Read { source } => source.source(),
-            BadRonParseKind::Parse { source } => source.source(),
-            BadRonParseKind::Empty => None,
-        }
-    }
 }
 
 #[derive(Debug, DeRon, SerRon)]

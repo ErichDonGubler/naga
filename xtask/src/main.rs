@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::{bail, Context};
+use clap::Parser;
 use cli::Args;
 
 use crate::{

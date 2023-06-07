@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 anyhow = "1"
 nanoserde = "0.1.32"
+thiserror = "1.0.39"
